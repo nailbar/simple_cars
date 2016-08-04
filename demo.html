@@ -1,0 +1,135 @@
+<!doctype html>
+<html>
+<head>
+<title>Some car thing</title>
+<meta name='author' value='Martin Wikström'>
+<style type='text/css'>
+body, html {
+    margin: 0;
+    padding: 0;
+}
+canvas {
+    width: 100%;
+    height: 100%;
+    background-color: #edc;
+    position: absolute;
+}
+</style>
+<script type='text/javascript' src='simple_car.js'></script>
+<script type='text/javascript'>
+var w = {};
+var g_logo = [
+    [1, 1, 1, 0, 1, 1, 1, 0, 1, 1, 1, 0, 1, 1, 1],
+    [1, 0, 0, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 0],
+    [1, 0, 0, 0, 1, 1, 1, 0, 1, 1, 0, 0, 0, 1, 0],
+    [1, 0, 0, 0, 1, 0, 1, 0, 1, 0, 1, 0, 0, 0, 1],
+    [1, 1, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 1, 1]
+];
+function init() {
+    w.canvas = document.getElementById('canvas');
+    w.c = w.canvas.getContext("2d");
+    w.canvas.width = window.innerWidth;
+    w.canvas.height = window.innerHeight;
+    
+    w.input = {
+        gf: 0,
+        tl: 0,
+        gb: 0,
+        tr: 0,
+        v: 0,
+        w: 0
+    };
+    w.cars = [];
+    
+    // Add waypoints
+    w.i = 0;
+    for(var x = 0; x < g_logo[0].length; x++) for(var y = 0; y < g_logo.length; y++) if(g_logo[y][x]) {
+        w.cars[w.i++] = new simple_car(
+            Math.random() * w.canvas.width - w.canvas.width * 0.5,
+            Math.random() * w.canvas.height - w.canvas.height * 0.5,
+            Math.random()
+        );
+    }
+    loop();
+}
+function loop() {
+    w.c.clearRect(0, 0, w.canvas.width, w.canvas.height);
+
+    // Calculate frame length in seconds
+    w.f = 1.0 / 1000.0 * 50.0;
+    
+    // Loop through cars
+    w.cars_with_waypoints = 0;
+    for(var i = 0; i < w.cars.length; i++) {
+        if(w.debug_id == i) w.debug = 1;
+        else w.debug = 0;
+        
+        // Count cars with waypoints
+        if(w.cars[i].waypoints.length) w.cars_with_waypoints++;
+        
+        // Follow waypoints
+        w.cars[i].follow(w.f);
+        
+        // Move car around
+        w.cars[i].move(w.f);
+        
+        // Draw car
+        w.cars[i].draw(w.c, w.canvas.width * 0.5 + w.cars[i].x, w.canvas.height * 0.5 + w.cars[i].y);
+    }
+    
+    // Next set of waypoints when everybody in position
+    if(!w.cars_with_waypoints) {
+        if(Math.random() < 0.5) {
+            for(var i = 0; i < w.cars.length; i++) {
+                w.cars[i].add_waypoint(
+                    Math.random() * w.canvas.width - w.canvas.width * 0.5,
+                    Math.random() * w.canvas.height - w.canvas.height * 0.5
+                );
+                if(i % 2) w.cars[i].add_waypoint(
+                    Math.cos(i / w.cars.length * Math.PI * 2.0) * w.canvas.height * 0.3 + w.canvas.height * 0.15,
+                    Math.sin(i / w.cars.length * Math.PI * 2.0) * w.canvas.height * 0.3
+                );
+                else w.cars[i].add_waypoint(
+                    Math.cos(i / w.cars.length * Math.PI * 2.0) * w.canvas.height * 0.3 - w.canvas.height * 0.15,
+                    Math.sin(i / w.cars.length * Math.PI * 2.0) * w.canvas.height * 0.3
+                );
+            }
+        } else {
+            w.i = 0;
+            for(var x = 0; x < g_logo[0].length; x++) for(var y = 0; y < g_logo.length; y++) if(g_logo[y][x]) {
+                w.cars[w.i].add_waypoint(
+                    Math.random() * w.canvas.width - w.canvas.width * 0.5,
+                    Math.random() * w.canvas.height - w.canvas.height * 0.5
+                );
+                w.cars[w.i++].add_waypoint(x * 25.0 - g_logo[0].length * 0.5 * 25.0, y * 25.0 - g_logo.length * 0.5 * 25.0);
+            }
+        }
+    }
+    setTimeout(loop, 50);
+}
+window.onkeyup = function(e) {
+    switch(e.key) {
+        case "w": w.input.gf = 0.0; break;
+        case "a": w.input.tl = 0.0; break;
+        case "s": w.input.gb = 0.0; break;
+        case "d": w.input.tr = 0.0; break;
+    }
+    w.input.v = w.input.gf - w.input.gb;
+    w.input.w = w.input.tr - w.input.tl;
+}
+window.onkeydown = function(e) {
+    switch(e.key) {
+        case "w": w.input.gf = 1.0; break;
+        case "a": w.input.tl = 1.0; break;
+        case "s": w.input.gb = 0.5; break;
+        case "d": w.input.tr = 1.0; break;
+    }
+    w.input.v = w.input.gf - w.input.gb;
+    w.input.w = w.input.tr - w.input.tl;
+}
+</script>
+</head>
+<body onload='init()'>
+<canvas id='canvas'></canvas>
+</body>
+</html>

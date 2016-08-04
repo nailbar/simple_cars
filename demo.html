@@ -67,6 +67,9 @@ function loop() {
         // Count cars with waypoints
         if(w.cars[i].waypoints.length) w.cars_with_waypoints++;
         
+        // Collision avoidance
+        w.cars[i].find_nearest(w.cars, i);
+        
         // Follow waypoints
         w.cars[i].follow(w.f);
         

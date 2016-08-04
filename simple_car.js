@@ -20,6 +20,10 @@ function simple_car(x, y, d) {
     this.waypoints = [];
     this.follow_mode = 0;
     
+    // Collision avoidance
+    this.nearest = [];
+    this.next = 0;
+    
     /**
      * Follow waypoints
      */
@@ -36,18 +40,31 @@ function simple_car(x, y, d) {
             'y': Math.sin((this.d + 0.25) * Math.PI * 2.0)
         };
         
-        // Check which side target is on
-        t.relative_target = {
+        // Target is other car to avoid
+        if(this.follow_mode == 2) {
+            t.near_distance = 1000000;
+            for(var i = 0; i < this.nearest.length; i++) if(this.nearest[i].distance < t.near_distance) {
+                t.relative_target = this.nearest[i].relative;
+                t.near_distance = this.nearest[i].distance;
+            }
+        
+        // Target is waypoint
+        } else t.relative_target = {
             'x': this.waypoints[0].x - this.x,
             'y': this.waypoints[0].y - this.y
         };
+        
+        // Check which side target is on
+        
         t.front_target = t.relative_target.x * this.normal.x + t.relative_target.y * this.normal.y;
         t.right_target = t.relative_target.x * this.right_normal.x + t.relative_target.y * this.right_normal.y;
         
         // Next waypoint
-        if(this.waypoints.length == 1) {
-            if(Math.max(Math.abs(t.front_target), Math.abs(t.right_target)) < 5.0 && Math.abs(this.v) < 2.0) this.waypoints.splice(0, 1);
-        } else if(Math.max(Math.abs(t.front_target), Math.abs(t.right_target)) < 100.0) this.waypoints.splice(0, 1);
+        if(this.follow_mode != 2) {
+            if(this.waypoints.length == 1) {
+                if(Math.max(Math.abs(t.front_target), Math.abs(t.right_target)) < 5.0 && Math.abs(this.v) < 2.0) this.waypoints.splice(0, 1);
+            } else if(Math.max(Math.abs(t.front_target), Math.abs(t.right_target)) < 100.0) this.waypoints.splice(0, 1);
+        }
         
         // Follow target depending on mode
         switch(this.follow_mode) {
@@ -87,6 +104,14 @@ function simple_car(x, y, d) {
                     if(t.front_target < t.right_target) t.v = -0.2;
                     else t.v = -0.2 * Math.abs(t.right_target / t.front_target);
                 }
+                break;
+            
+            // Collision avoidance
+            case 2:
+                    
+                // Turn wheels away from target
+                t.w = (t.right_target > 0 ? -1.0 : 1.0);
+                t.v = 0.1;
                 break;
                 
         }
@@ -164,7 +189,17 @@ function simple_car(x, y, d) {
         // Position car
         c.save();
         c.translate(x, y);
+        
+        // Debug nearest
+        if(w.debug) for(var i = 0; i < this.nearest.length; i++) {
+            c.beginPath();
+            c.moveTo(0, 0);
+            c.lineTo(this.nearest[i].relative.x, this.nearest[i].relative.y);
+            c.stroke();
+        }
         c.rotate(this.d * Math.PI * 2.0);
+        
+        // Mark car
         if(w.debug) c.strokeRect(-20, -20, 40, 40);
         
         // Draw wheels
@@ -191,6 +226,7 @@ function simple_car(x, y, d) {
         c.fillRect(0, -3, 11, 6);
         c.restore();
         
+        // Debug waypoints
 //         if(this.waypoints.length) {
 //             c.beginPath();
 //             c.moveTo(w.canvas.width * 0.5 + this.x, w.canvas.height * 0.5 + this.y);
@@ -204,5 +240,88 @@ function simple_car(x, y, d) {
      */
     this.add_waypoint = function(x, y) {
         this.waypoints.push({x, y});
+    }
+    
+    /**
+     * Update list of nearest cars
+     */
+    this.find_nearest = function(cars, self_id) {
+        var v = {};
+        if(this.follow_mode == 2) this.follow_mode = 0;
+        if(!this.normal) return;
+        
+        // Update values for current list
+        for(var i = 0; i < this.nearest.length; i++) {
+            
+            // Remove illegal ids
+            if(this.nearest[i].id >= cars.length || this.nearest[i].id == self_id) {
+                this.nearest.splice(i, 1);
+                i--;
+            } else {
+                
+                // Recalculate
+                this.nearest[i] = this.get_nearness(cars[this.nearest[i].id], this.nearest[i].id);
+                
+                // Go into collision avoidance mode if too near
+                if(this.nearest[i].distance < 30.0 + this.v) this.follow_mode = 2;
+            }
+        }
+        
+        // Check for nearer
+        for(var i = 0; i < 3; i++) {
+            if(this.next >= cars.length) this.next = 0;
+            
+            // Compare this car with the current list and replace the furthest away if this one is closer
+            if(this.next != self_id && this.next < cars.length) {
+                v.next_near = this.get_nearness(cars[this.next], this.next);
+                v.add_next = this.nearest.length < 5;
+                v.remove_id = -1;
+                if(!v.add_next) for(var i = 0; i < this.nearest.length; i++) {
+                    
+                    // Prevent adding the same car twice
+                    if(this.nearest[i].id == v.next_near.id) {
+                        v.add_next = false;
+                        v.remove_id = -1;
+                        break;
+                    
+                    // Find car to remove in place of the new one
+                    } else if(this.nearest[i].distance > v.next_near.distance) {
+                        v.add_next = true;
+                        if(v.remove_id < 0) v.remove_id = i;
+                        else if(this.nearest[v.remove_id].distance < this.nearest[i].distance) v.remove_id = i;
+                    }
+                }
+                
+                // Remove old
+                if(v.remove_id > -1) this.nearest.splice(v.remove_id, 1);
+                
+                // Add new
+                if(v.add_next) {
+                    this.nearest.push(v.next_near);
+                    
+                    // Go into collision avoidance mode if too near
+                    if(v.next_near.distance < 50.0 + this.v * 10.0) this.follow_mode = 2;
+                }
+            }
+            this.next++;
+        }
+    }
+    
+    /**
+     * Helper for calculating nearest cars
+     */
+    this.get_nearness = function(car, car_id) {
+        var near = {};
+        near.id = car_id;
+        
+        // Quick and dirty distance calculation
+        near.relative = {
+//             'x': car.x - (this.x + this.normal.x * this.v),
+//             'y': car.y - (this.y + this.normal.y * this.v)
+            'x': car.x - this.x,
+            'y': car.y - this.y
+        };
+        near.distance = near.relative.x * near.relative.x + near.relative.y * near.relative.y;
+        return near;
     }
 }

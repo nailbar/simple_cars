@@ -54,17 +54,23 @@ function simple_car(x, y, d) {
             
             // Drive towards target
             case 0:
-                if(t.front_target < 0) this.follow_mode = 1;
+                if(t.front_target < 0 && t.front_target * t.front_target + t.right_target * t.right_target < 10000.0) this.follow_mode = 1;
                 else {
                     
                     // Turn wheels towards target
                     t.w = (t.right_target < 0 ? -1.0 : 1.0);
-                    if(t.right_target < t.front_target) t.w *= Math.abs(t.right_target / t.front_target);
+                    if(Math.abs(t.right_target) < t.front_target && t.front_target > 0) {
+                        t.w *= Math.abs(t.right_target / t.front_target);
+                    }
                     
                     // Accelerate towards target, break in time
-                    if(t.front_target < t.right_target) t.v = 1.0;
+                    if(t.front_target < t.right_target || t.front_target < 0) t.v = 1.0;
+                    else if(this.waypoints.length > 1) t.v = Math.max(-0.5, Math.min(1.0, (t.front_target - this.v) / 100.0));
                     else t.v = Math.max(-0.5, Math.min(1.0, (t.front_target - this.v) / 300.0));
                     t.v *= 1.0 - Math.abs(t.w) * 0.9;
+                    
+                    // Some slight adjustment
+                    if(Math.abs(t.right_target) > 5.0) t.v = Math.max(0.1, t.v);
                 }
                 break;
                 
@@ -97,14 +103,15 @@ function simple_car(x, y, d) {
         var w = (t.w ? Math.min(1.0, Math.max(-1.0, t.w)) : 0);
         
         // Car velocity
-        this.v += (v * 300.0 - this.v) * 1.2 * f;
+        if(this.v > 0 && v <= 0) this.v -= 70.0 * f;
+        else if(this.v < 0 && v >= 0) this.v += 70.0 * f;
+        else this.v += (v * 300.0 - this.v) * 1.2 * f;
         
         // Velocity affects max wheel direction
         if(Math.abs(this.v) > 350.0) w = 0;
         else w *= (1.0 - Math.abs(this.v / 350.0));
         
         // Car wheels
-//         this.w = w;
         if(Math.abs(this.w) < f && w == 0) this.w -= this.w * f;
         else if(w > this.w) this.w += 2.0 * f;
         else this.w -= 2.0 * f;
